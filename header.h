@@ -17,19 +17,25 @@ public:
 	}
 };
 
+
+
 class Error
 {
 public:
 	Error(MatrixXd A, double* B, int norm)
 	{
-		int m = A.cols();
+		int m = A.rows();
+		//cout << m << endl;
 		double e = 0;
 		if (norm == 1)
 		{
+			//cout << "norm-1" << endl;
 			for (int i = 0; i < m; i++)
 			{
-				e += fabs( A(i,0) - B[i]);
+				//cout <<" "<<A(i,0)<<" "<<B[i]<<" "<< fabs(A(i, 0) - B[i]) << endl;
+				e += fabs(A(i,0) - B[i]);
 			}
+			cout << "1-norm Error = " << e << endl;
 		}
 		else if (norm == 2)
 		{
@@ -38,6 +44,7 @@ public:
 				e += (A(i, 0) - B[i]) * (A(i, 0) - B[i]);
 			}
 			e = sqrt(e);
+			cout << "2-norm Error = " << e << endl;
 		}
 		else
 		{
@@ -49,9 +56,43 @@ public:
 					e = d;
 				}
 			}
+			cout << "max-Error = " << e << endl;
 		}
+	}
+	void convergence_rate(double error_n,double error_2n, int n)
+	{
+		double c = log(error_n / error_2n)/log(2);
+		cout << "convergence_rate = " << c << endl;
 
-		
+	}
+};
+
+class cal_true_solution
+{
+public:
+	double* cal_true_solution_(int n, Function& fun)
+	{
+		double h = 1.0 / n;
+		double* real_u = new double[(n-1)*(n-1)];
+		//cout << "real u:" << endl;
+		/*double** real_u;
+		real_u = new double* [(n - 1) * (n - 1)];
+		for (int k = 0; k < (n - 1) * (n - 1); k++)
+		{
+			real_u[k] = new double[(n - 1) * (n - 1)];
+		}*/
+		//cout << "real u:" << endl;
+		for (int i = 0; i < n-1; i++)
+		{
+			for (int j = 0; j < n-1; j++)
+			{
+				real_u[i*(n-1)+j] = fun((j + 1) * h, (i + 1) * h);
+				
+				//cout <<" "<< i * (n - 1) + j <<" "<< real_u[i * (n - 1) + j ] << endl;
+			}
+		}
+		return real_u;
+
 	}
 };
 
@@ -81,9 +122,9 @@ MatrixXd PDE::transfer_A(double** A,int n)
 		for (int j = 0; j < (n - 1) * (n - 1); j++)
 		{
 			A2D(i, j) = A[i+1][j+1];
-			cout << A2D(i, j) << " ";
+			//cout << A2D(i, j) << " ";
 		}
-		cout << endl;
+		//cout << endl;
 	}
 	return A2D;
 }
@@ -98,18 +139,18 @@ MatrixXd PDE::transfer_F(double** F,int n)
 	//cout << "Alen3:" << Alen3 << endl;
 
 	MatrixXd F2D((n-1)*(n-1), 1);
-	for (int i = 1; i < n; i++)
+	for (int i = 0; i < n-1; i++)
 	{
-		for (int j = 1; j < n; j++)
+		for (int j = 0; j < n-1; j++)
 		{
-			F2D((i-1) + (j-1)* (n-1) , 0) = F[i][j];
+			F2D((i) + (j)* (n-1) , 0) = F[i+1][j+1];
 		}
 	}
-	cout << "F:" << endl;
+	/*cout << "f:" << endl;
 	for (int i = 0; i < (n - 1) * (n - 1); i++)
 	{
 		cout << F2D(i, 0) << endl;
-	}
+	}*/
 	return F2D;
 
 }
@@ -134,7 +175,7 @@ double** PDE::set_left_matrix(int n)
 			{
 				A[i][j] = 4.0;
 			}
-			else if (j == i - 3)
+			else if (j == i - (n-1))
 			{
 				A[i][j] = -1.0;
 			}
@@ -181,12 +222,13 @@ double** PDE::Set_right_matrix(int n, Function& f1)//偏微分方程
 	{
 		F[k] = new double[s];
 	}
+	//cout << "F_natural" << endl;
 	for (int i = 1; i <= (n - 1); i++)
 	{
 		for (int j = 1; j <= (n - 1); j++)
 		{
 			F[i][j] =h*h*f1(i * h, j * h);
-			//cout << h*h*F[i][j]<<" ";
+			//cout <<F[i][j] << " " ;
 		}
 		//cout << endl;
 	}
@@ -214,9 +256,11 @@ PDE::PDE(int n, Function& func, Function& funcdiff, const string& type_name)//fu
 		//cout << func(0.0, h);
 
 		//四个角落
+		//cout << "F[1][1]" << F[1][1] << endl;
 		F[1][1] = F[1][1] + func(0.0, h) + func(h, 0.0);
+		//cout <<"F[1][1]"<< F[1][1] << endl;
 		F[m][m] = F[m][m] + func(1.0, m * h) + func(m * h, 1.0);
-		F[1][m] = F[1][m] + func(h, 1.0) + func(0.0, m*h);
+		F[1][m] = F[1][m] + func(h,1.0) + func(0.0, m*h);
 		F[m][1] = F[m][1] + func(1.0,h) + func(m * h,0.0);
 		//cout << F[1][m] << endl;
 		//最下边
@@ -252,37 +296,28 @@ PDE::PDE(int n, Function& func, Function& funcdiff, const string& type_name)//fu
 			cout << endl;
 		}*/
 		//cout << "A:" << endl;
+		
+	}
 		MatrixXd A2D = transfer_A(A, n);
 		MatrixXd F2D = transfer_F(F,n);
-		MatrixXd u=s1.solve_matrix(A2D, F2D);
-		cout << "u:" << endl;
-		cout << u << endl;
-		cal_true_solution c1(4, func);
-		//Error err(u,);
-	}
+		/*cout << "A2D:" << endl;
+		cout << A2D << endl;
+		cout << "F2D:" << endl;
+		cout << F2D << endl;*/
+		MatrixXd u = A2D.lu().solve(F2D);
+		//MatrixXd u=s1.solve_matrix(A2D, F2D);
+		//cout << "u:" << endl;
+		//cout << u << endl;
+		cal_true_solution c1;
+		double* true_u=c1.cal_true_solution_(n, func);
+		Error err(u, true_u, 1);
+		Error err1(u, true_u, 2);
+		Error err2(u, true_u, 3);
+
+
 }
 
-class cal_true_solution
-{
-public:
-	cal_true_solution(int n, Function& fun)
-	{
-		double h = 1.0 / n;
-		double* real_u = new double[(n-1)*(n-1)];
-		cout << "real u:" << endl;
-		for (int i = 0; i < n-1; i++)
-		{
-			for (int j = 0; j < n-1; j++)
-			{
-				real_u[ i + j  * (n - 1)] = fun((i+1) * h, (j+1) * h);
-				
-				cout << real_u[i + j * (n - 1)] << endl;
-			}
-			
-		}
 
-	}
-};
 
 
 
