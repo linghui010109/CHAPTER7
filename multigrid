@@ -1,0 +1,239 @@
+#include <iostream>
+#include <cmath>
+#include <vector>
+#include "Function.h"
+
+using namespace std;
+
+
+void weighted_jacobi(vector<double>& initial_value, const vector<double>& b, double w, int max_iter) {
+    int n = initial_value.size();
+    vector<double> x(n, 0.0);
+    vector<double> x_new(n, 0.0);
+    vector<double> c(n,0.0);
+
+    for (int iter = 0; iter < max_iter; iter++) {
+        
+        x[0] = - 0.5 * initial_value[1];
+        x[n - 1] = - 0.5 * initial_value[n - 2];
+        for (int j = 1; j < n - 1; j++)
+        {
+            x[j] = - 0.5 * initial_value[j - 1] - 0.5 * initial_value[j + 1];
+        }
+        for (int i = 0; i < n; i++)
+        {
+            c[i] = 0.5 * b[i];
+            x_new[i] = (1 - w) * initial_value[i] + w * (x[i]+c[i]);
+        }
+        /*double diff_norm = 0.0;
+        for (int i = 0; i < n; i++)
+        {
+            diff_norm += pow(x_new[i] - initial_value[i], 2);
+        }
+        diff_norm = sqrt(diff_norm);
+        if(diff_norm<tol)
+        {
+            break;
+        }*/
+        initial_value = x_new;
+    }
+    cout << "initial_value" << endl;
+    //cout << initial_value.size() << endl;
+    for(int i=0;i<initial_value.size();i++)
+    {
+        cout << initial_value[i] << endl;
+    }
+}
+
+
+void restriction(vector<double>& r,int n, vector<double> vec)//n为细网格数
+{
+    //vector<double> r(n, 0.0);
+    for (int i = 1; i < n / 2 ; i++)
+    {
+        r[i-1] = 0.5 * vec[2 * i-1] + 0.25 * (vec[2 * i - 2] + vec[2 * i ]);
+    }
+}
+
+void linear_interpolation(vector<double>& l,int n,vector<double> vec)//n为粗网格数
+{   int n=vec.size()
+    //vector<double> l(2*n-1, 0.0);
+    l[0] = 0.5 * (vec[0]);
+    l[2*n-2] = 0.5 * (1.0 + vec[n-2]);
+
+    for (int i = 1; i < n; i++)
+    {
+        l[2 * i - 1] = vec[i - 1];
+    }
+    for (int i = 1; i < n-1; i++)
+    {
+        l[2 * i] = 0.5 * (vec[i - 1] + vec[i]);
+    }
+    //return l;
+}
+
+vector<double> residual(vector<double> f, vector<double>v)
+{
+    int s = v.size();
+    vector<double> r(s, 0.0);
+    r[0] = f[0] - 2 * v[0] + v[1];
+    r[s - 1] = f[s - 1] + v[s - 2] - 2 * v[s - 1];
+    for (int i = 1; i < s - 1; i++)
+    {
+        r[i] = f[i] + v[i - 1] - 2 * v[i] + v[i + 1];
+    }
+    return r;
+}
+
+vector<double> get_F(Function& f,Function& fxx, int n)
+{
+    double h = 1.0 / n;
+    vector<double> F(n - 1, 0.0);
+    F[0] = h * h * fxx(h) + f(0.0);
+    F[n - 2] = h * h * fxx((n - 1) * h) + f(1.0);
+    for (int i = 1; i < n-2; i++)
+    {
+        F[i] = h * h * fxx((i+1) * h);
+    }
+    return F;
+}
+
+void error(int n,Function& f, vector<double> fxx)
+{
+    double h = 1.0 / n;
+    cout << "Error:" << endl;
+    for (int i = 0; i < fxx.size(); i++)
+    {
+        vector<double> err(fxx.size(), 0.0);
+        err[i] = f((i + 1) * h) - fxx[i];
+        cout << f((i + 1) * h)<<" "<< fxx[i] << endl;
+    }
+}
+
+class multigrid
+{
+public:
+void vcycle(int n, int cycle_depth, vector<double>& u,vector<double>& f,int v_1,int v_2,double w)
+{
+        
+    if (cycle_depth == 0)//到达最粗网格
+    {
+        weighted_jacobi(u, f, w, v_1);
+        cout << "u" << endl;
+        for (int i = 0; i < u.size(); i++)
+        {
+            //u[i] += i;
+            cout << u[i] << endl;
+        }
+    }
+    else
+    {
+        vector<double> u_2(n/2-1, 0.0);
+        vector<double> r_2h(n/2-1, 0.0);
+        vector<double> l_h(n - 1, 0.0);
+            
+        //先进行v_1次带权重的jacobi迭代
+        weighted_jacobi(u, f, w, v_1);
+
+
+        //计算resisual
+        vector<double> r = residual(f, u);
+        //cout << "r: " << endl;
+        //for (int i = 0; i < r.size(); i++)
+        //{
+                
+            //cout << r[i] << endl;
+        //}
+        // 
+        //进行限制操作
+        restriction(r_2h,n, r);
+        cout << "r_2h: " << endl;
+        for (int i = 0; i < r_2h.size(); i++)
+        {
+
+            cout << r_2h[i] << endl;
+        }
+
+        //递归调用多重网格函数
+        vcycle(n / 2, cycle_depth - 1, u_2, r_2h, v_1, v_2, w);
+        cout << "u_2:" << endl;
+        for (int i = 0; i < u_2.size(); i++)
+        {
+            cout << u_2[i] << endl;
+        }
+
+        //进行插值操作
+        linear_interpolation(l_h, n/2, u_2);
+        cout<< "l_h" << endl;
+        for (int i = 0; i < l_h.size(); i++)
+        {
+            cout << l_h[i] << endl;
+        }
+        
+       
+        //使用残差进行修正
+        //cout << "final" << endl;
+        for (int i = 0; i < n-1; i++)
+        {
+              u[i] = l_h[i] + u[i];
+              //cout << u[i]<<" "<<l_h[i] << endl;
+        }
+        weighted_jacobi(u, f, w, v_2);
+    }
+    //cout <<  "uxxxx" << endl;
+    //for (int i = 0; i < u.size(); i++)
+    //{
+
+        //cout << u[i] << endl;
+    //}
+}
+
+void FMG(vector<double>& u, vector<double>& f, int depth, int v_1, int v_2, double w)
+{
+    int n = u.size();
+    if (depth == 0)
+    {
+        //如果是最粗网格
+        weighted_jacobi(u, f, w, v_1);
+
+    }
+    else
+    {
+        vector<double> u_2(n / 2 - 1, 0.0);
+        vector<double> l_h(n / 2 - 1, 0.0);
+        vector<double> r_2h(n - 1, 0.0);
+
+        //进行限制操作
+        restriction(r_2h, n, u);
+
+        //递归调用FMG
+        FMG(u_2, l_h, depth - 1, v_1, v_2, w);
+
+        //
+        linear_interpolation(u, n / 2, u_2);
+
+        //求解迭代
+        weighted_jacobi(u, f, w, v_1);
+
+        //计算残差
+        r_2h = residual(f, u);
+
+
+        //递归调用FMG
+        FMG(u_2, l_h, depth - 1, v_1, v_2, w);
+
+        //线性插值
+        linear_interpolation(l_h, n / 2, u_2);
+
+
+
+    }
+}
+
+    
+};
+
+
+
+
+
